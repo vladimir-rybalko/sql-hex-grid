@@ -5,7 +5,12 @@ CREATE OR REPLACE FUNCTION generate_hex_grid_meters(
     y_max DOUBLE PRECISION,
     cell_size DOUBLE PRECISION -- в метрах
 )
-RETURNS SETOF geometry AS $$
+
+RETURNS TABLE (
+    cell_id TEXT,
+    geometry GEOMETRY(POLYGON, 4326),
+    centroid GEOMETRY(POINT, 4326)
+) AS $$
 DECLARE
     dx DOUBLE PRECISION := 3 * cell_size;
     dy DOUBLE PRECISION := sqrt(3) * cell_size;
@@ -50,7 +55,15 @@ BEGIN
             -- Фильтрация по исходному bbox (в метрах)
             IF ST_Intersects(hex, env3857) THEN
                 -- Преобразуем обратно в WGS 84 (градусы)
-                RETURN NEXT ST_Transform(hex, 4326);
+	            RETURN QUERY
+	            SELECT 
+	                md5(concat((x - x_min) / cell_size, '-', (y - y_min) / cell_size)) AS cell_id,
+	
+	                -- Строим шестиугольник в проекции 3857 и переводим обратно в WGS84
+	                ST_Transform( hex, 4326 )::GEOMETRY(POLYGON, 4326) AS geometry,
+	
+	                -- Центр ячейки
+	                ST_Transform(ST_Centroid(hex), 4326)::GEOMETRY(POINT, 4326) AS centroid;
             END IF;
 
             col := col + 1;
